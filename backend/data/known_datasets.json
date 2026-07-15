@@ -1,0 +1,22 @@
+[
+  {"name": "UCI Machine Learning Repository", "url": "https://archive.ics.uci.edu/", "description": "Large collection of classic ML benchmark datasets across domains.", "kaggle_url": null},
+  {"name": "Kaggle Datasets", "url": "https://www.kaggle.com/datasets", "description": "Community-contributed datasets spanning nearly every domain, with notebooks.", "kaggle_url": "https://www.kaggle.com/datasets"},
+  {"name": "HuggingFace Datasets", "url": "https://huggingface.co/datasets", "description": "Large hub of NLP, vision, and multimodal datasets with a standard loading API.", "kaggle_url": "https://www.kaggle.com/datasets/huggingface"},
+  {"name": "PhysioNet", "url": "https://physionet.org/", "description": "Curated clinical and physiological signal datasets for healthcare research.", "kaggle_url": "https://www.kaggle.com/datasets/mondejar/mitbih-database"},
+  {"name": "OpenML", "url": "https://www.openml.org/", "description": "Searchable repository of ML datasets with standardized benchmarking metadata.", "kaggle_url": null},
+  {"name": "MIMIC-III / MIMIC-IV", "url": "https://physionet.org/content/mimiciv/", "description": "De-identified ICU clinical records, a common healthcare-AI benchmark.", "kaggle_url": "https://www.kaggle.com/datasets/asjad99/mimiciii"},
+  {"name": "ImageNet", "url": "https://www.image-net.org/", "description": "Large-scale labeled image dataset for computer vision.", "kaggle_url": "https://www.kaggle.com/c/imagenet-object-localization-challenge"},
+  {"name": "COCO (Common Objects in Context)", "url": "https://cocodataset.org/", "description": "Object detection, segmentation, and captioning benchmark dataset.", "kaggle_url": "https://www.kaggle.com/datasets/awsaf49/coco-2017-dataset"},
+  {"name": "GLUE Benchmark", "url": "https://gluebenchmark.com/", "description": "Suite of NLP understanding tasks used for benchmarking language models.", "kaggle_url": null},
+  {"name": "NSL-KDD", "url": "https://www.unb.ca/cic/datasets/nsl.html", "description": "Refined intrusion-detection dataset commonly used in cybersecurity research.", "kaggle_url": "https://www.kaggle.com/datasets/hassan06/nslkdd"},
+  {"name": "CICIDS2017", "url": "https://www.unb.ca/cic/datasets/ids-2017.html", "description": "Realistic network intrusion detection dataset with labeled attack traffic.", "kaggle_url": "https://www.kaggle.com/datasets/dhoogla/cicids2017"},
+  {"name": "UNSW-NB15", "url": "https://research.unsw.edu.au/projects/unsw-nb15-dataset", "description": "Modern network intrusion detection dataset with hybrid real/synthetic traffic.", "kaggle_url": "https://www.kaggle.com/datasets/mrwellsdavid/unsw-nb15"},
+  {"name": "World Bank Open Data", "url": "https://data.worldbank.org/", "description": "Global development, economic, and finance indicators.", "kaggle_url": "https://www.kaggle.com/datasets/theworldbank/world-development-indicators"},
+  {"name": "Yahoo Finance Historical Data", "url": "https://finance.yahoo.com/", "description": "Historical market price data commonly used in finance research.", "kaggle_url": "https://www.kaggle.com/datasets/dgawlik/nyse"},
+  {"name": "EdNet", "url": "https://github.com/riiid/ednet", "description": "Large-scale student interaction dataset for education/AI research.", "kaggle_url": "https://www.kaggle.com/c/riiid-test-answer-prediction"},
+  {"name": "PlantVillage Dataset", "url": "https://www.kaggle.com/datasets/emmarex/plantdisease", "description": "Labeled crop leaf images for plant disease classification in agriculture.", "kaggle_url": "https://www.kaggle.com/datasets/emmarex/plantdisease"},
+  {"name": "Copernicus Open Access Hub", "url": "https://scihub.copernicus.eu/", "description": "Satellite earth-observation data, commonly used for climate research.", "kaggle_url": null},
+  {"name": "CrowdHuman", "url": "https://www.crowdhuman.org/", "description": "Human detection benchmark dataset, often used in robotics/vision research.", "kaggle_url": null},
+  {"name": "KITTI Vision Benchmark", "url": "https://www.cvlibs.net/datasets/kitti/", "description": "Autonomous driving and robotics perception benchmark dataset.", "kaggle_url": "https://www.kaggle.com/datasets/klemenko/kitti-dataset"},
+  {"name": "CIC-IoT2023", "url": "https://www.unb.ca/cic/datasets/iotdataset-2023.html", "description": "IoT network traffic dataset for intrusion detection research.", "kaggle_url": "https://www.kaggle.com/datasets/madhavmalhotra/unb-cic-iot-dataset"}
+]

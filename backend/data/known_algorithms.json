@@ -1,0 +1,20 @@
+[
+  {"name": "Random Forest", "url": "https://scikit-learn.org/stable/modules/ensemble.html#forest", "description": "Ensemble of decision trees; strong tabular-data baseline."},
+  {"name": "XGBoost", "url": "https://xgboost.readthedocs.io/", "description": "Gradient-boosted trees; widely used for structured/tabular prediction."},
+  {"name": "LightGBM", "url": "https://lightgbm.readthedocs.io/", "description": "Fast, memory-efficient gradient boosting framework."},
+  {"name": "Convolutional Neural Network (CNN)", "url": "https://www.tensorflow.org/tutorials/images/cnn", "description": "Standard architecture for image and grid-structured data."},
+  {"name": "Transformer", "url": "https://arxiv.org/abs/1706.03762", "description": "Attention-based architecture underlying most modern NLP/vision models."},
+  {"name": "BERT", "url": "https://arxiv.org/abs/1810.04805", "description": "Pretrained bidirectional transformer for NLP understanding tasks."},
+  {"name": "Long Short-Term Memory (LSTM)", "url": "https://www.bioinf.jku.at/publications/older/2604.pdf", "description": "Recurrent architecture for sequential/time-series data."},
+  {"name": "Graph Neural Network (GNN)", "url": "https://arxiv.org/abs/1901.00596", "description": "Architecture family for learning over graph-structured data."},
+  {"name": "Reinforcement Learning (PPO)", "url": "https://arxiv.org/abs/1707.06347", "description": "Proximal Policy Optimization; common RL algorithm for control/robotics."},
+  {"name": "Support Vector Machine (SVM)", "url": "https://scikit-learn.org/stable/modules/svm.html", "description": "Classical margin-based classifier, strong on small/medium datasets."},
+  {"name": "K-Means Clustering", "url": "https://scikit-learn.org/stable/modules/clustering.html#k-means", "description": "Classical unsupervised clustering algorithm."},
+  {"name": "Isolation Forest", "url": "https://scikit-learn.org/stable/modules/outlier_detection.html", "description": "Tree-based anomaly/outlier detection algorithm, common in cybersecurity/finance."},
+  {"name": "Federated Averaging (FedAvg)", "url": "https://arxiv.org/abs/1602.05629", "description": "Core federated-learning algorithm for privacy-preserving distributed training."},
+  {"name": "U-Net", "url": "https://arxiv.org/abs/1505.04597", "description": "Encoder-decoder CNN architecture widely used for medical image segmentation."},
+  {"name": "YOLO (You Only Look Once)", "url": "https://arxiv.org/abs/1506.02640", "description": "Real-time object detection architecture, common in robotics/vision."},
+  {"name": "Autoencoder", "url": "https://www.deeplearningbook.org/contents/autoencoders.html", "description": "Unsupervised representation-learning / anomaly-detection architecture."},
+  {"name": "ARIMA", "url": "https://otexts.com/fpp2/arima.html", "description": "Classical statistical time-series forecasting model, common in finance."},
+  {"name": "Deep Q-Network (DQN)", "url": "https://arxiv.org/abs/1312.5602", "description": "Value-based deep RL algorithm for discrete-action control problems."}
+]
