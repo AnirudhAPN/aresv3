@@ -56,6 +56,26 @@ def _gemini_retry_delay_seconds(exc: Exception) -> float | None:
     return None
 
 
+def _gemini_is_daily_quota_exhausted(exc: Exception) -> bool:
+    """True if this 429 is a PerDay quota violation.
+
+    Gemini's RetryInfo.retryDelay is NOT a reliable signal for this — it
+    returns a short delay (single-digit seconds) even when the violated
+    quota is 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', i.e. the
+    daily cap is fully exhausted and won't reset for hours. Retrying based
+    on that delay just re-hits the same wall. The quotaId in the
+    QuotaFailure detail is the actual signal to check."""
+    details = getattr(exc, "details", None)
+    if not isinstance(details, dict):
+        return False
+    for entry in details.get("error", {}).get("details", []):
+        if str(entry.get("@type", "")).endswith("QuotaFailure"):
+            for violation in entry.get("violations", []):
+                if "PerDay" in str(violation.get("quotaId", "")):
+                    return True
+    return False
+
+
 def _anthropic_retry_delay_seconds(exc: Exception) -> float | None:
     """Read the standard HTTP Retry-After header Anthropic sends on 429s."""
     response = getattr(exc, "response", None)
@@ -100,9 +120,25 @@ class LLMService:
 
     # -- Generation (Gemini) -------------------------------------------------
 
-    def generate(self, prompt: str, temperature: float = 0.4, max_retries: int = 3) -> str:
+    def generate(
+        self, prompt: str, temperature: float = 0.4, max_retries: int = 3, agent: str | None = None
+    ) -> str:
         """Call the generating model and return raw text.
-        Retries automatically on 429 rate-limit errors with exponential backoff."""
+        Retries automatically on 429 rate-limit errors with exponential backoff.
+
+        If settings.llm_provider == "local" AND an agent name is given,
+        routes to that agent's locally fine-tuned model instead of Gemini —
+        no network call, no quota. Local training only ever covered the 5
+        pipeline agents (planner/literature/gap/methodology/reviewer);
+        auxiliary conversational features (the Assistant chatbot, the
+        results-page refinement chat) call this with no agent and always
+        fall through to the real API below — they were never in scope for
+        local training and have no adapter to route to.
+        """
+        if settings.llm_provider == "local" and agent is not None:
+            from services.local_model import local_model_service
+            return local_model_service.generate(agent, prompt)
+
         client = self._ensure_gemini()
         for attempt in range(max_retries + 1):
             try:
@@ -114,6 +150,12 @@ class LLMService:
                 return response.text
             except Exception as exc:
                 if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc):
+                    if _gemini_is_daily_quota_exhausted(exc):
+                        logging.error(
+                            "Gemini daily free-tier quota is exhausted — retrying won't help until "
+                            "the quota resets. Failing fast instead of blocking."
+                        )
+                        raise
                     server_delay = _gemini_retry_delay_seconds(exc)
                     if server_delay is not None and server_delay > _MAX_HONORED_RETRY_DELAY_SECONDS:
                         logging.warning(
@@ -145,10 +187,25 @@ class LLMService:
 
     # -- Judging (separate model, default Anthropic) -------------------------
 
-    def judge(self, prompt: str, temperature: float = 0.0, max_retries: int = 3) -> str:
+    def judge(
+        self, prompt: str, temperature: float = 0.0, max_retries: int = 3, agent: str | None = None
+    ) -> str:
         """Call the judge model (independent of the generator) for
         confidence scoring or qualitative critique.
-        Retries automatically on rate-limit errors with exponential backoff."""
+        Retries automatically on rate-limit errors with exponential backoff.
+
+        If settings.llm_provider == "local" AND an agent name is given,
+        routes to that agent's locally fine-tuned model instead (used for
+        the reviewer agent's critique step, which is trained like the other
+        4 agents). Cross-cutting judge calls with no agent (e.g. the
+        confidence scorer in services/collaboration.py, shared across all
+        agents) still use the API judge — that scorer was not part of the
+        "5 agents" fine-tuning scope.
+        """
+        if settings.llm_provider == "local" and agent is not None:
+            from services.local_model import local_model_service
+            return local_model_service.generate(agent, prompt)
+
         if settings.judge_provider == "anthropic":
             client = self._ensure_anthropic()
             for attempt in range(max_retries + 1):

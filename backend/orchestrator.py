@@ -17,6 +17,7 @@ which routing function is imported, without touching this file's topology.
 """
 from __future__ import annotations
 
+import logging
 import time
 from typing import Literal
 
@@ -40,6 +41,7 @@ from prompts.planner_prompt import build_planner_prompt
 from prompts.gap_prompt import build_gap_prompt
 from prompts.methodology_prompt import build_methodology_prompt
 from utils.prompt_helpers import build_retry_prompt
+from services import coherence as coherence_service
 from services import collaboration
 from services.memory import memory_service
 
@@ -343,6 +345,17 @@ def build_graph(condition: CollaborationCondition = "adaptive"):
         if any(not passed for passed in output.rule_check_results.values()):
             state.setdefault("flags", []).append("reviewer_rule_check_failed")
 
+        # Cross-Agent Coherence: computed once all three of planner/gap/
+        # methodology are available. Not part of any single agent's ACS —
+        # it's a whole-proposal signal, so it lives alongside ACS rather
+        # than folded into it.
+        report = coherence_service.compute_coherence(
+            state["planner_output"], state["gap_output"], state["methodology_output"]
+        )
+        state["coherence"] = report
+        if report.overall_score < collaboration.settings.acs_retry_threshold:
+            state.setdefault("flags", []).append("low_cross_agent_coherence")
+
         state.setdefault("completed_agents", []).append("reviewer")
         return state
 
@@ -389,13 +402,23 @@ def run_pipeline(session_id: str, topic: str, condition: CollaborationCondition 
             completed_agents=final_state.get("completed_agents", []),
             acs_scores=final_state.get("acs_scores", {}),
             acs_components=final_state.get("acs_components", {}),
+            coherence=final_state.get("coherence"),
             retry_counts=final_state.get("retry_counts", {}),
             parse_failures=final_state.get("parse_failures", {}),
             flags=final_state.get("flags", []),
         )
         return final_state
     except Exception as exc:  # noqa: BLE001 — must not crash the background task
-        memory_service.update_status(session_id, status="failed", flags=[f"error: {exc}"])
+        # A clean, user-facing flag — never the raw provider exception text,
+        # which would leak implementation details (provider name, internal
+        # URLs) straight into the UI.
+        text = str(exc)
+        if "RESOURCE_EXHAUSTED" in text or "429" in text:
+            flag = "generation_quota_exhausted"
+        else:
+            flag = "pipeline_error"
+        logging.error("Pipeline failed for session %s: %s", session_id, exc)
+        memory_service.update_status(session_id, status="failed", flags=[flag])
         raise
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from config import settings
 from agents.base import BaseAgent
 from models.schemas import LiteratureOutput, Paper
 from prompts.literature_prompt import build_literature_synthesis_prompt
@@ -26,25 +27,31 @@ class LiteratureAgent(BaseAgent):
         if not papers:
             return LiteratureOutput(papers=[], low_coverage=True, keywords_used=keywords), False
 
-        # LLM synthesis step — constrained to the real retrieved abstracts.
-        prompt = build_literature_synthesis_prompt(topic, [p.model_dump() for p in papers])
         parse_failed = False
-        try:
-            raw = llm_service.generate(prompt)
-            cleaned = _strip_code_fences(raw)
-            parsed = json.loads(cleaned)
-            summaries = parsed.get("summaries", [])
-            for paper, summary in zip(papers, summaries):
-                paper.summary = summary
-        except (json.JSONDecodeError, KeyError, TypeError):
-            # Synthesis failed structurally — fall back to using the raw
-            # abstract as the "summary" rather than failing the whole agent,
-            # since the underlying retrieval (the part that matters for
-            # verifiability) already succeeded.
-            parse_failed = True
-            for paper in papers:
-                if not paper.summary:
-                    paper.summary = paper.abstract[:280]
+        if settings.llm_provider == "local":
+            from services.local_model import local_model_service
+            data = local_model_service.run_literature(topic, [p.model_dump() for p in papers])
+            for paper, summary in zip(papers, data.get("summaries", [])):
+                paper.summary = summary or paper.abstract[:280]
+        else:
+            # LLM synthesis step — constrained to the real retrieved abstracts.
+            prompt = build_literature_synthesis_prompt(topic, [p.model_dump() for p in papers])
+            try:
+                raw = llm_service.generate(prompt, agent="literature")
+                cleaned = _strip_code_fences(raw)
+                parsed = json.loads(cleaned)
+                summaries = parsed.get("summaries", [])
+                for paper, summary in zip(papers, summaries):
+                    paper.summary = summary
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # Synthesis failed structurally — fall back to using the raw
+                # abstract as the "summary" rather than failing the whole agent,
+                # since the underlying retrieval (the part that matters for
+                # verifiability) already succeeded.
+                parse_failed = True
+                for paper in papers:
+                    if not paper.summary:
+                        paper.summary = paper.abstract[:280]
 
         annotate_citations(papers)
 

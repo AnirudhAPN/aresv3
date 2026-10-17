@@ -1,6 +1,6 @@
-import { AlertTriangle, RotateCcw, Gauge } from "lucide-react";
+import { AlertTriangle, RotateCcw, Gauge, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AgentName } from "@/types";
+import type { AgentName, CoherenceReport } from "@/types";
 
 const AGENTS: { key: AgentName; label: string }[] = [
   { key: "planner", label: "Planner" },
@@ -23,6 +23,7 @@ interface ScoresSidebarProps {
   parseFailures: Record<string, boolean>;
   novelty?: number;
   quality?: number;
+  coherence?: CoherenceReport | null;
   className?: string;
 }
 
@@ -104,6 +105,45 @@ function AgentScoreRow({
   );
 }
 
+function CoherenceCard({ coherence }: { coherence: CoherenceReport }) {
+  const color = scoreColor(coherence.overall_score);
+  return (
+    <div className="rounded-xl border border-border bg-surface/70 glass p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Link2 className="h-4 w-4 text-primary-400" />
+        <h3 className="text-sm font-semibold">Coherence</h3>
+        <span className="text-sm font-bold ml-auto" style={{ color }}>
+          {Math.round(coherence.overall_score * 100)}%
+        </span>
+      </div>
+      <p className="text-[10px] text-muted mb-2.5 leading-relaxed">
+        Does the proposal hang together as one plan — not just five agents that each look
+        plausible on their own?
+      </p>
+      <MiniBar label="Gaps addressed by methodology" value={coherence.gap_coverage_score} />
+      <MiniBar label="Gaps trace back to research questions" value={coherence.question_alignment_score} />
+      {coherence.uncovered_gaps.length > 0 && (
+        <div className="mt-2.5 pt-2.5 border-t border-border">
+          <div className="flex items-center gap-1.5 mb-1">
+            <AlertTriangle className="h-3 w-3 text-amber-400" />
+            <span className="text-[10px] font-semibold text-amber-400">
+              {coherence.uncovered_gaps.length} gap{coherence.uncovered_gaps.length > 1 ? "s" : ""} not
+              addressed by the methodology
+            </span>
+          </div>
+          <ul className="space-y-1">
+            {coherence.uncovered_gaps.map((g, i) => (
+              <li key={i} className="text-[10px] text-muted leading-snug pl-1 border-l border-border">
+                {g}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ScoresSidebar({
   acsScores,
   acsComponents,
@@ -111,6 +151,7 @@ export default function ScoresSidebar({
   parseFailures,
   novelty,
   quality,
+  coherence,
   className,
 }: ScoresSidebarProps) {
   const scoreValues = Object.values(acsScores);
@@ -174,6 +215,8 @@ export default function ScoresSidebar({
             trigger one automatic retry.
           </p>
         </div>
+
+        {coherence && <CoherenceCard coherence={coherence} />}
       </div>
     </aside>
   );

@@ -50,7 +50,14 @@ export default function Home() {
             navigate(`/results/${session_id}`);
           } else if (s.status === "failed") {
             stopPolling();
-            setError("Something went wrong while generating this proposal. Please try again.");
+            if (s.flags.includes("generation_quota_exhausted")) {
+              setError(
+                "The AI provider's daily free-tier request limit has been reached. It resets on a rolling " +
+                  "24-hour basis — please try again later, or ask whoever manages this deployment to raise the quota."
+              );
+            } else {
+              setError("Something went wrong while generating this proposal. Please try again.");
+            }
             setLoading(false);
           }
         } catch {

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+from config import settings
 from models.schemas import (
     GapOutput,
     LiteratureOutput,
@@ -17,6 +18,7 @@ from models.schemas import (
     ReviewerOutput,
 )
 from prompts.reviewer_prompt import build_reviewer_critique_prompt
+from services import similarity
 from services.llm import llm_service, _strip_code_fences
 
 
@@ -76,7 +78,6 @@ class ReviewerAgent:
             "methodology": methodology_output.model_dump(),
         }
 
-        prompt = build_reviewer_critique_prompt(topic, full_proposal, rule_check_results)
         parse_failed = False
         strengths: list[str] = []
         weaknesses: list[str] = []
@@ -84,17 +85,35 @@ class ReviewerAgent:
         novelty_score = 0.5
         quality_score = 0.5
 
-        try:
-            raw = llm_service.judge(prompt)
-            cleaned = _strip_code_fences(raw)
-            parsed = json.loads(cleaned)
-            strengths = parsed.get("strengths", [])
-            weaknesses = parsed.get("weaknesses", [])
-            missing_components = parsed.get("missing_components", [])
-            novelty_score = float(parsed.get("novelty_score", 0.5))
-            quality_score = float(parsed.get("quality_score", 0.5))
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            parse_failed = True
+        if settings.llm_provider == "local":
+            from services.local_model import local_model_service
+            gap_descriptions = [g.gap_description for g in gap_output.gaps]
+            data = local_model_service.run_reviewer(
+                topic, planner_output.research_objectives, gap_descriptions, rule_check_results
+            )
+            strengths = data["strengths"]
+            weaknesses = data["weaknesses"]
+            missing_components = data["missing_components"]
+            quality_score = data["quality_score"]
+        else:
+            prompt = build_reviewer_critique_prompt(topic, full_proposal, rule_check_results)
+            try:
+                raw = llm_service.judge(prompt, agent="reviewer")
+                cleaned = _strip_code_fences(raw)
+                parsed = json.loads(cleaned)
+                strengths = parsed.get("strengths", [])
+                weaknesses = parsed.get("weaknesses", [])
+                missing_components = parsed.get("missing_components", [])
+                novelty_score = float(parsed.get("novelty_score", 0.5))
+                quality_score = float(parsed.get("quality_score", 0.5))
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                parse_failed = True
+
+        # Overrides whatever novelty_score the generator produced (LLM
+        # self-report on the API path, a fixed placeholder on the local
+        # path) with a real, evidence-grounded measure: how similar is
+        # this topic to the papers actually retrieved for it.
+        novelty_score = similarity.compute_novelty_score(topic, literature_output.papers)
 
         caveats = [
             f"Rule check failed: {name}" for name, passed in rule_check_results.items() if not passed

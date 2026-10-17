@@ -22,6 +22,7 @@ def init_db() -> None:
                 user_id TEXT NOT NULL DEFAULT 'default',
                 topic TEXT NOT NULL,
                 status TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'live',
                 current_agent TEXT,
                 completed_agents_json TEXT,
                 acs_scores_json TEXT,
@@ -87,6 +88,15 @@ def init_db() -> None:
         existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(ResearchSession)")}
         if "acs_components_json" not in existing_cols:
             conn.execute("ALTER TABLE ResearchSession ADD COLUMN acs_components_json TEXT")
+            conn.commit()
+        if "coherence_json" not in existing_cols:
+            conn.execute("ALTER TABLE ResearchSession ADD COLUMN coherence_json TEXT")
+            conn.commit()
+        if "source" not in existing_cols:
+            # Default 'live': anything predating this column is assumed to be
+            # real app usage unless proven otherwise (see scripts/backfill_session_source.py
+            # for the one-time reclassification of pre-existing seed sessions).
+            conn.execute("ALTER TABLE ResearchSession ADD COLUMN source TEXT NOT NULL DEFAULT 'live'")
             conn.commit()
     finally:
         conn.close()

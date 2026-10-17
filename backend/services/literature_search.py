@@ -29,7 +29,7 @@ class LiteratureSearchService:
 
     # -- Semantic Scholar ------------------------------------------------
 
-    def _search_semantic_scholar(self, query: str, limit: int = 10, max_retries: int = 2) -> list[Paper]:
+    def _search_semantic_scholar(self, query: str, limit: int = 10, max_retries: int = 3) -> list[Paper]:
         headers = {}
         if settings.semantic_scholar_api_key:
             headers["x-api-key"] = settings.semantic_scholar_api_key
@@ -44,9 +44,14 @@ class LiteratureSearchService:
             for attempt in range(max_retries + 1):
                 resp = client.get(url, params=params, headers=headers)
                 if resp.status_code == 429 and attempt < max_retries:
-                    wait = 2 ** attempt * 3  # 3s, 6s — the shared free-tier limit resets fast
+                    # Prefer the server's own Retry-After when it sends one —
+                    # the shared free-tier limit doesn't always reset on our
+                    # fixed schedule, and guessing too short just burns
+                    # retries on more 429s. Fall back to backoff otherwise.
+                    retry_after = resp.headers.get("retry-after")
+                    wait = float(retry_after) if retry_after else 2 ** attempt * 4  # 4s, 8s, 16s
                     logging.warning(
-                        "Semantic Scholar rate-limited (attempt %d/%d). Retrying in %ds...",
+                        "Semantic Scholar rate-limited (attempt %d/%d). Retrying in %ss...",
                         attempt + 1, max_retries + 1, wait,
                     )
                     time.sleep(wait)
@@ -77,7 +82,7 @@ class LiteratureSearchService:
 
     # -- arXiv -------------------------------------------------------------
 
-    def _search_arxiv(self, query: str, limit: int = 10) -> list[Paper]:
+    def _search_arxiv(self, query: str, limit: int = 10, max_retries: int = 2) -> list[Paper]:
         params = {
             "search_query": f"all:{query}",
             "start": 0,
@@ -85,10 +90,26 @@ class LiteratureSearchService:
             "sortBy": "relevance",
             "sortOrder": "descending",
         }
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-            resp = client.get(settings.arxiv_base_url, params=params)
-            resp.raise_for_status()
-            xml_text = resp.text
+        # arXiv's public API has no rate-limit response to react to like
+        # Semantic Scholar's 429 — it just times out under load — so this
+        # retries on ANY transport error (timeout, connection reset), not
+        # just a specific status code.
+        for attempt in range(max_retries + 1):
+            try:
+                with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+                    resp = client.get(settings.arxiv_base_url, params=params)
+                    resp.raise_for_status()
+                    xml_text = resp.text
+                break
+            except httpx.HTTPError:
+                if attempt >= max_retries:
+                    raise
+                wait = 2 ** attempt * 3  # 3s, 6s
+                logging.warning(
+                    "arXiv search failed (attempt %d/%d). Retrying in %ds...",
+                    attempt + 1, max_retries + 1, wait,
+                )
+                time.sleep(wait)
 
         root = ET.fromstring(xml_text)
         papers: list[Paper] = []
@@ -163,10 +184,17 @@ class LiteratureSearchService:
         top = ranked[: settings.max_papers_returned]
         low_coverage = len(top) < settings.min_papers_for_full_coverage
 
-        literature_cache.set(
-            keywords,
-            {"papers": [p.model_dump() for p in top], "low_coverage": low_coverage},
-        )
+        # A zero-paper result almost always means BOTH sources failed
+        # transiently (rate limit + timeout hitting the same call, observed
+        # in practice) rather than a genuine "no literature exists" finding.
+        # Caching that for literature_cache_ttl_days (30 days) would lock
+        # this exact keyword-set to zero papers for a month even after the
+        # outage passes — only cache real results.
+        if top:
+            literature_cache.set(
+                keywords,
+                {"papers": [p.model_dump() for p in top], "low_coverage": low_coverage},
+            )
         return top, low_coverage
 
 

@@ -74,6 +74,8 @@ def get_status(session_id: str) -> ResearchStatusResponse:
         completed_agents=session.get("completed_agents", []),
         acs_scores=session.get("acs_scores", {}),
         acs_components=session.get("acs_components", {}),
+        coherence=session.get("coherence"),
+        flags=session.get("flags", []),
     )
 
 

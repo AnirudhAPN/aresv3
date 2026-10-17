@@ -40,7 +40,7 @@ class BaseAgent:
         last_error = ""
         for attempt in range(settings.max_structural_retries_per_agent + 1):
             try:
-                raw_text = llm_service.generate(prompt)
+                raw_text = llm_service.generate(prompt, agent=getattr(self, "name", None))
                 cleaned = _strip_code_fences(raw_text)
                 parsed = json.loads(cleaned)
                 validated = schema.model_validate(parsed)

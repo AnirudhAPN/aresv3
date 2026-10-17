@@ -113,7 +113,7 @@ def test_chat_question_does_not_mutate_session():
             _seed_completed_session(memory_service, session_id, "Federated Learning for IoT Security")
             before = memory_service.get_session(session_id)
 
-            def fake_generate(prompt, temperature=0.4):
+            def fake_generate(prompt, temperature=0.4, agent=None, **kwargs):
                 if "routing a follow-up" in prompt:
                     return json.dumps({"target": "question", "instruction": ""})
                 return "The literature review covers three papers on federated learning and IoT security."
@@ -150,7 +150,7 @@ def test_chat_refinement_updates_target_agent_and_cascades_reviewer():
             session_id = memory_service.create_session("Federated Learning for IoT Security")
             _seed_completed_session(memory_service, session_id, "Federated Learning for IoT Security")
 
-            def fake_generate(prompt, temperature=0.4):
+            def fake_generate(prompt, temperature=0.4, agent=None, **kwargs):
                 if "routing a follow-up" in prompt:
                     return json.dumps({"target": "gap", "instruction": "Add a gap about privacy leakage."})
                 if "REFINEMENT REQUEST" in prompt and "gap_description" in prompt or "gaps" in prompt:
@@ -170,7 +170,7 @@ def test_chat_refinement_updates_target_agent_and_cascades_reviewer():
                 return json.dumps({"strengths": [], "weaknesses": [], "missing_components": [],
                                     "novelty_score": 0.7, "quality_score": 0.65})
 
-            def fake_judge(prompt, temperature=0.0):
+            def fake_judge(prompt, temperature=0.0, agent=None, **kwargs):
                 return json.dumps({
                     "strengths": ["Now covers privacy leakage explicitly"],
                     "weaknesses": ["Still limited dataset diversity"],
@@ -180,7 +180,8 @@ def test_chat_refinement_updates_target_agent_and_cascades_reviewer():
 
             with patch.object(llm_service, "generate", side_effect=fake_generate), \
                  patch.object(llm_service, "judge", side_effect=fake_judge), \
-                 patch.object(collaboration, "_get_embedder", return_value=_FakeEmbedder()):
+                 patch.object(collaboration, "_get_embedder", return_value=_FakeEmbedder()), \
+                 patch("services.similarity.get_embedder", return_value=_FakeEmbedder()):
                 result = chat_service.handle_chat_message(
                     session_id, "Can you add a gap about privacy leakage risks?"
                 )
@@ -192,8 +193,11 @@ def test_chat_refinement_updates_target_agent_and_cascades_reviewer():
             assert any("privacy leakage" in g["gap_description"] for g in gap_output["gaps"])
 
             # Reviewer should have been refreshed as a side effect since gap changed.
+            # novelty_score is now computed from evidence (topic vs. retrieved
+            # papers), not taken from the judge's self-report — so it's no
+            # longer expected to equal fake_judge's 0.75, just a valid score.
             reviewer_output = session["agent_outputs"]["reviewer"]["output"]
-            assert reviewer_output["novelty_score"] == 0.75
+            assert 0.0 <= reviewer_output["novelty_score"] <= 1.0
 
             history = memory_service.get_chat_history(session_id)
             assert history[-1]["agent_updated"] == "gap"

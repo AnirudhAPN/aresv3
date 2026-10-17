@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from config import settings
 from agents.base import BaseAgent, StructuralRetryResult
 from models.schemas import MethodologyOutput
 from prompts.methodology_prompt import build_methodology_prompt
@@ -28,10 +29,17 @@ class MethodologyAgent(BaseAgent):
         self.known_algorithms = _load_whitelist("known_algorithms.json")
 
     def run(self, topic: str, research_questions: list[str]) -> StructuralRetryResult:
-        prompt = build_methodology_prompt(
-            topic, research_questions, self.known_datasets, self.known_algorithms
-        )
-        result = self.generate_validated(prompt, MethodologyOutput)
+        if settings.llm_provider == "local":
+            from services.local_model import local_model_service
+            data = local_model_service.run_methodology(
+                topic, research_questions, self.known_datasets, self.known_algorithms
+            )
+            result = StructuralRetryResult(MethodologyOutput(**data), parse_failed=False, raw_text="")
+        else:
+            prompt = build_methodology_prompt(
+                topic, research_questions, self.known_datasets, self.known_algorithms
+            )
+            result = self.generate_validated(prompt, MethodologyOutput)
 
         # Defense in depth: re-verify against the whitelist in code, in case
         # the model marked verified=true for something not actually on it.

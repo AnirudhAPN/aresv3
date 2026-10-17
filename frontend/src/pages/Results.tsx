@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   BookOpen,
@@ -13,6 +13,7 @@ import {
   Link2,
   Link2Off,
   ChevronLeft,
+  X,
 } from "lucide-react";
 import { getResearchReport, exportUrl } from "@/lib/api";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -48,10 +49,40 @@ function Badge({ children, tone = "muted" }: { children: React.ReactNode; tone?:
   );
 }
 
+/** Fetch a binary/text export and trigger a browser download. */
+async function downloadExport(
+  sessionId: string,
+  format: "markdown" | "text" | "pdf" | "docx",
+): Promise<string | null> {
+  const res = await fetch(exportUrl(sessionId, format));
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return (body as { detail?: string }).detail ?? `Export failed (HTTP ${res.status})`;
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const ext: Record<string, string> = {
+    markdown: "md",
+    text: "txt",
+    pdf: "pdf",
+    docx: "docx",
+  };
+  a.href = url;
+  a.download = `ares-report.${ext[format]}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return null;
+}
+
 export default function Results() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<ResearchSession | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   usePageTitle(session?.topic ?? "Research Proposal");
 
@@ -61,6 +92,23 @@ export default function Results() {
       .then(setSession)
       .catch(() => setError("Could not load this research session."));
   }, [sessionId]);
+
+  const handleDownload = useCallback(
+    async (format: "markdown" | "text" | "pdf" | "docx") => {
+      if (!sessionId || downloading) return;
+      setDownloadError(null);
+      setDownloading(format);
+      try {
+        const err = await downloadExport(sessionId, format);
+        if (err) setDownloadError(err);
+      } catch {
+        setDownloadError("Download failed — is the server reachable?");
+      } finally {
+        setDownloading(null);
+      }
+    },
+    [sessionId, downloading],
+  );
 
   if (error) {
     return <div className="max-w-3xl mx-auto py-10 px-4 text-red-400 text-sm">{error}</div>;
@@ -101,31 +149,43 @@ export default function Results() {
             ))}
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <a
-            href={exportUrl(session.session_id, "markdown")}
-            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-primary-500/50 transition"
-          >
-            <Download className="h-3.5 w-3.5" /> Markdown
-          </a>
-          <a
-            href={exportUrl(session.session_id, "text")}
-            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-primary-500/50 transition"
-          >
-            <Download className="h-3.5 w-3.5" /> Text
-          </a>
-          <a
-            href={exportUrl(session.session_id, "pdf")}
-            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-primary-500/50 transition"
-          >
-            <Download className="h-3.5 w-3.5" /> PDF
-          </a>
-          <a
-            href={exportUrl(session.session_id, "docx")}
-            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-primary-500/50 transition"
-          >
-            <Download className="h-3.5 w-3.5" /> Word
-          </a>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="flex gap-2">
+            {(["markdown", "text", "pdf", "docx"] as const).map((fmt) => {
+              const labels: Record<string, string> = {
+                markdown: "Markdown",
+                text: "Text",
+                pdf: "PDF",
+                docx: "Word",
+              };
+              const isActive = downloading === fmt;
+              return (
+                <button
+                  key={fmt}
+                  onClick={() => handleDownload(fmt)}
+                  disabled={!!downloading}
+                  title={`Download as ${labels[fmt]}`}
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-surface2 hover:border-primary-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isActive ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {labels[fmt]}
+                </button>
+              );
+            })}
+          </div>
+          {downloadError && (
+            <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/30 px-3 py-1.5 rounded-lg max-w-xs">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span className="flex-1">{downloadError}</span>
+              <button onClick={() => setDownloadError(null)} className="shrink-0 hover:text-red-200">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -137,6 +197,7 @@ export default function Results() {
           parseFailures={session.parse_failures}
           novelty={reviewer?.novelty_score}
           quality={reviewer?.quality_score}
+          coherence={session.coherence}
           className="order-first lg:order-last"
         />
 
@@ -247,9 +308,35 @@ export default function Results() {
                     {gap.gaps.map((g, i) => (
                       <div key={i} className="rounded-lg border border-border bg-surface2/50 p-3">
                         <p className="text-sm">{g.gap_description}</p>
-                        <p className="text-[11px] text-muted mt-1">
-                          Based on: {g.based_on_papers.join(", ") || "—"} · {g.confidence_note}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted mt-1.5">
+                          <span>Based on:</span>
+                          {g.citations.length === 0 && <span>—</span>}
+                          {g.citations.map((c, ci) => (
+                            <span key={ci} className="inline-flex items-center gap-1">
+                              {c.url ? (
+                                <a
+                                  href={c.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={c.matched ? "Open the source paper" : "Best-effort match — title may not exactly match a retrieved paper"}
+                                  className="inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5 hover:text-primary-400 hover:border-primary-400/50"
+                                >
+                                  {c.title}
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              ) : (
+                                <span
+                                  title="Could not confidently match this to a retrieved paper"
+                                  className="rounded border border-border/70 px-1.5 py-0.5 text-white/70"
+                                >
+                                  {c.title}
+                                </span>
+                              )}
+                              {ci < g.citations.length - 1 && <span>,</span>}
+                            </span>
+                          ))}
+                          <span>· {g.confidence_note}</span>
+                        </div>
                       </div>
                     ))}
                   </div>

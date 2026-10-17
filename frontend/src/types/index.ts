@@ -34,9 +34,18 @@ export interface LiteratureOutput {
   similar_work: SimilarWorkMatch | null;
 }
 
+export interface GapCitation {
+  title: string;
+  url: string | null;
+  source: string | null;
+  year: number | null;
+  matched: boolean;
+}
+
 export interface ResearchGap {
   gap_description: string;
   based_on_papers: string[];
+  citations: GapCitation[];
   confidence_note: string;
 }
 
@@ -81,6 +90,13 @@ export interface AgentOutputEntry<T = unknown> {
   parse_failed: boolean;
 }
 
+export interface CoherenceReport {
+  overall_score: number;
+  gap_coverage_score: number;
+  question_alignment_score: number;
+  uncovered_gaps: string[];
+}
+
 export interface ResearchSession {
   session_id: string;
   user_id: string;
@@ -98,6 +114,7 @@ export interface ResearchSession {
   completed_agents: AgentName[];
   acs_scores: Record<string, number>;
   acs_components: Record<string, { confidence: number; evidence_quality: number; task_completion: number }>;
+  coherence: CoherenceReport | null;
   retry_counts: Record<string, number>;
   parse_failures: Record<string, boolean>;
   flags: string[];
@@ -122,6 +139,8 @@ export interface ResearchStatusResponse {
   completed_agents: AgentName[];
   acs_scores: Record<string, number>;
   acs_components: Record<string, { confidence: number; evidence_quality: number; task_completion: number }>;
+  coherence: CoherenceReport | null;
+  flags: string[];
 }
 
 export interface HistoryItem {

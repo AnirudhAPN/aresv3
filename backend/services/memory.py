@@ -12,7 +12,7 @@ from difflib import SequenceMatcher
 from typing import Any, Optional
 
 from database.sqlite import get_connection, init_db
-from models.schemas import ResearchState
+from models.schemas import CoherenceReport, ResearchState
 
 init_db()
 
@@ -20,19 +20,25 @@ SIMILAR_TOPIC_THRESHOLD = 0.6
 
 
 class MemoryService:
-    def create_session(self, topic: str, user_id: str = "default") -> str:
+    def create_session(self, topic: str, user_id: str = "default", source: str = "live") -> str:
+        """`source` distinguishes curated fine-tuning seed data ('seed') from
+        real app usage ('live', the default). Only 'seed' sessions are ever
+        pulled into scripts/build_finetune_dataset.py — this is what stops
+        ordinary usage (or the local model's own generations) from silently
+        feeding back into the next training round, which corrupted the
+        dataset twice before this column existed."""
         session_id = str(uuid.uuid4())
         conn = get_connection()
         try:
             conn.execute(
                 """
                 INSERT INTO ResearchSession
-                    (session_id, user_id, topic, status, current_agent,
+                    (session_id, user_id, topic, status, source, current_agent,
                      completed_agents_json, acs_scores_json, acs_components_json,
                      retry_counts_json, parse_failures_json, flags_json, created_at)
-                VALUES (?, ?, ?, 'running', NULL, '[]', '{}', '{}', '{}', '{}', '[]', ?)
+                VALUES (?, ?, ?, 'running', ?, NULL, '[]', '{}', '{}', '{}', '{}', '[]', ?)
                 """,
-                (session_id, user_id, topic, time.time()),
+                (session_id, user_id, topic, source, time.time()),
             )
             conn.commit()
         finally:
@@ -47,6 +53,7 @@ class MemoryService:
         completed_agents: Optional[list[str]] = None,
         acs_scores: Optional[dict[str, float]] = None,
         acs_components: Optional[dict[str, dict[str, float]]] = None,
+        coherence: Optional[CoherenceReport] = None,
         retry_counts: Optional[dict[str, int]] = None,
         parse_failures: Optional[dict[str, bool]] = None,
         flags: Optional[list[str]] = None,
@@ -66,6 +73,9 @@ class MemoryService:
             if acs_components is not None:
                 fields.append("acs_components_json = ?")
                 values.append(json.dumps(acs_components))
+            if coherence is not None:
+                fields.append("coherence_json = ?")
+                values.append(coherence.model_dump_json())
             if retry_counts is not None:
                 fields.append("retry_counts_json = ?")
                 values.append(json.dumps(retry_counts))
@@ -156,6 +166,8 @@ class MemoryService:
             session["completed_agents"] = json.loads(session.pop("completed_agents_json") or "[]")
             session["acs_scores"] = json.loads(session.pop("acs_scores_json") or "{}")
             session["acs_components"] = json.loads(session.pop("acs_components_json") or "{}")
+            coherence_raw = session.pop("coherence_json", None)
+            session["coherence"] = json.loads(coherence_raw) if coherence_raw else None
             session["retry_counts"] = json.loads(session.pop("retry_counts_json") or "{}")
             session["parse_failures"] = json.loads(session.pop("parse_failures_json") or "{}")
             session["flags"] = json.loads(session.pop("flags_json") or "[]")
@@ -170,11 +182,15 @@ class MemoryService:
         (own research history, not published literature — see
         services/similarity.py for the retrieved-paper check). Cheap string
         similarity is enough here since topics are short and this only
-        needs to catch near-duplicate phrasing, not semantic paraphrases."""
+        needs to catch near-duplicate phrasing, not semantic paraphrases.
+        Scoped to source='live' only — the seed corpus used for local-model
+        fine-tuning is synthetic training data, not anything a real user
+        actually researched, so it must never surface as a "you've already
+        looked into this" match."""
         conn = get_connection()
         try:
             rows = conn.execute(
-                "SELECT session_id, topic FROM ResearchSession WHERE status = 'completed'"
+                "SELECT session_id, topic FROM ResearchSession WHERE status = 'completed' AND source = 'live'"
             ).fetchall()
         finally:
             conn.close()
@@ -191,11 +207,14 @@ class MemoryService:
         return matches[:5]
 
     def list_history(self, user_id: str = "default") -> list[dict[str, Any]]:
+        """Scoped to source='live' — the synthetic seed corpus used to
+        fine-tune the local model must never clutter a real user's research
+        history."""
         conn = get_connection()
         try:
             rows = conn.execute(
                 "SELECT session_id, topic, status, created_at FROM ResearchSession "
-                "ORDER BY created_at DESC"
+                "WHERE source = 'live' ORDER BY created_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
         finally:

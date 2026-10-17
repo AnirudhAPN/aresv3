@@ -59,9 +59,21 @@ class LiteratureOutput(BaseModel):
 # Agent 3 — Gap Analysis (evidence-bounded)
 # ---------------------------------------------------------------------------
 
+class GapCitation(BaseModel):
+    """Resolves a `based_on_papers` title string back to the actual
+    retrieved paper it refers to, so the UI can link straight to the
+    source instead of showing an unclickable title string."""
+    title: str
+    url: Optional[str] = None
+    source: Optional[str] = None
+    year: Optional[int] = None
+    matched: bool = True   # False = no retrieved paper matched confidently
+
+
 class ResearchGap(BaseModel):
     gap_description: str
     based_on_papers: list[str] = Field(default_factory=list)
+    citations: list[GapCitation] = Field(default_factory=list)
     confidence_note: str = ""
 
 
@@ -108,6 +120,23 @@ class ReviewerOutput(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Cross-Agent Coherence — does the proposal actually hang together as ONE
+# plan, or just five independently-plausible sections? A single-model
+# chatbot response is trivially "coherent" with itself; a multi-agent
+# pipeline has a failure mode those tools structurally cannot have: later
+# agents that don't actually build on earlier ones. Measured with
+# embeddings (not LLM self-report), same evidence-grounding rule as the
+# rest of ARES. See services/coherence.py.
+# ---------------------------------------------------------------------------
+
+class CoherenceReport(BaseModel):
+    overall_score: float = 0.0
+    gap_coverage_score: float = 0.0          # do gaps get addressed by the methodology?
+    question_alignment_score: float = 0.0    # do gaps trace back to the research questions?
+    uncovered_gaps: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Shared LangGraph state
 # ---------------------------------------------------------------------------
 
@@ -121,6 +150,7 @@ class ResearchState(TypedDict, total=False):
     reviewer_output: Optional[ReviewerOutput]
     acs_scores: dict[str, float]
     acs_components: dict[str, dict[str, float]]
+    coherence: Optional[CoherenceReport]
     retry_counts: dict[str, int]
     structural_retry_counts: dict[str, int]
     parse_failures: dict[str, bool]
@@ -190,6 +220,8 @@ class ResearchStatusResponse(BaseModel):
     completed_agents: list[str] = Field(default_factory=list)
     acs_scores: dict[str, float] = Field(default_factory=dict)
     acs_components: dict[str, dict[str, float]] = Field(default_factory=dict)
+    coherence: Optional[CoherenceReport] = None
+    flags: list[str] = Field(default_factory=list)
 
 
 class ResearchSession(BaseModel):
@@ -205,6 +237,7 @@ class ResearchSession(BaseModel):
     reviewer_output: Optional[ReviewerOutput] = None
     acs_scores: dict[str, float] = Field(default_factory=dict)
     acs_components: dict[str, dict[str, float]] = Field(default_factory=dict)
+    coherence: Optional[CoherenceReport] = None
     retry_counts: dict[str, int] = Field(default_factory=dict)
     parse_failures: dict[str, bool] = Field(default_factory=dict)
     flags: list[str] = Field(default_factory=list)

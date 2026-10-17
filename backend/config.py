@@ -36,6 +36,12 @@ class ACSWeights:
 @dataclass
 class Settings:
     # --- LLM providers ---
+    # "api": use Gemini (generate) + Anthropic (judge), the original design.
+    # "local": use the locally fine-tuned per-agent models in
+    #   models/finetuned/<agent>/adapter — no network calls, no API keys,
+    #   no quota. See scripts/finetune_agent.py and services/local_model.py.
+    llm_provider: str = os.getenv("LLM_PROVIDER", "api")
+
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
